@@ -1,7 +1,7 @@
 name: Build rgeo gem for Windows
 
 on:
-  workflow_dispatch:  # Manual trigger from Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,7 +9,7 @@ jobs:
     
     strategy:
       matrix:
-        ruby-version: ['2.4', '3.0', '3.1', '3.2', '3.3']  # Adjust versions as needed
+        ruby-version: ['2.4',]
     
     steps:
       - name: Set up Ruby
@@ -17,41 +17,49 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby-version }}
       
-      - name: Install dependencies
-        run: |
-          gem install bundler
-          gem install rake
-          gem install rake-compiler
+      - name: Install build tools
+        run: choco install mingw -y
       
-      - name: Build rgeo gem
+      - name: Install GEOS
+        run: choco install geos -y
+      
+      - name: Build rgeo gem with verbose output
         run: |
-          gem install rgeo --version 2.2 --platform=x64-mingw-ucrt -- --with-geos-dir=${{ runner.temp }}\geos
+          gem install rgeo --version 2.2 -v --platform=x64-mingw-ucrt 2>&1
         continue-on-error: true
       
-      - name: Locate compiled gem
+      - name: Find and package compiled gem
         run: |
           $gemPath = ruby -r rubygems -e "puts Gem.default_dir"
-          echo "Gem directory: $gemPath"
-          Get-ChildItem "$gemPath\gems\" -Filter "rgeo*"
-          Get-ChildItem "$gemPath\extensions\" -Recurse -Filter "*rgeo*"
-      
-      - name: Copy compiled gem to artifact directory
-        run: |
-          $gemPath = ruby -r rubygems -e "puts Gem.default_dir"
-          $artifactPath = "${{ runner.temp }}\rgeo-artifacts"
-          New-Item -ItemType Directory -Path $artifactPath -Force
+          echo "Gem Path: $gemPath"
           
-          # Copy gems
-          Copy-Item "$gemPath\gems\rgeo*" $artifactPath -Recurse -ErrorAction SilentlyContinue
+          # Create output directory
+          $outputDir = "rgeo-compiled-ruby-${{ matrix.ruby-version }}"
+          New-Item -ItemType Directory -Path $outputDir -Force
           
-          # Copy extensions
-          Copy-Item "$gemPath\extensions\*\*\rgeo*" $artifactPath -Recurse -ErrorAction SilentlyContinue
+          # Copy the entire rgeo gem folder
+          if (Test-Path "$gemPath\gems\rgeo*") {
+            Copy-Item "$gemPath\gems\rgeo*" "$outputDir\gems\" -Recurse -Force
+            echo "Copied gems"
+          }
           
-          Get-ChildItem $artifactPath -Recurse
+          # Copy compiled extensions
+          if (Test-Path "$gemPath\extensions") {
+            Copy-Item "$gemPath\extensions\*\*\rgeo*" "$outputDir\extensions\" -Recurse -Force -ErrorAction SilentlyContinue
+            echo "Copied extensions"
+          }
+          
+          # List what we got
+          echo "Contents:"
+          Get-ChildItem $outputDir -Recurse
+          
+          # Create a zip file
+          Compress-Archive -Path $outputDir -DestinationPath "rgeo-${{ matrix.ruby-version }}.zip" -Force
+          echo "Created zip file"
       
       - name: Upload compiled gem
         uses: actions/upload-artifact@v4
         with:
-          name: rgeo-gem-ruby-${{ matrix.ruby-version }}
-          path: ${{ runner.temp }}\rgeo-artifacts/
+          name: rgeo-compiled-ruby-${{ matrix.ruby-version }}
+          path: rgeo-${{ matrix.ruby-version }}.zip
           retention-days: 30
