@@ -9,7 +9,7 @@ jobs:
     
     strategy:
       matrix:
-        ruby-version: ['2.4', '3.0', '3.1', '3.2', '3.3']  # Adjust versions as needed
+        ruby-version: ['2.4']  # Adjust versions as needed
     
     steps:
       - name: Set up Ruby
@@ -35,7 +35,7 @@ jobs:
           Get-ChildItem "$gemPath\gems\rgeo*" -Recurse | Get-Item
       
       - name: Upload compiled gem
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: rgeo-gem-ruby-${{ matrix.ruby-version }}
           path: |
